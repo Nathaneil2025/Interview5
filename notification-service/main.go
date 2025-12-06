@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -59,7 +60,7 @@ func getNotificationHandler(w http.ResponseWriter, r *http.Request) {
 	id := vars["id"]
 
 	for _, n := range notifications {
-		if string(rune(n.ID+'0')) == id || (n.ID >= 10 && string(n.ID) == id) {
+		if strconv.Itoa(n.ID) == id {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(n)
 			return
