@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="$PATH:/var/lib/jenkins/.local/bin:$HOME/.local/bin:$(go env GOPATH)/bin"
 set -e
 
 SERVICE=$1

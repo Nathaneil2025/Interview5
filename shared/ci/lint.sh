@@ -8,6 +8,9 @@ if [ -z "$SERVICE" ]; then
     exit 1
 fi
 
+# Add local bin directories to PATH
+export PATH="$PATH:/var/lib/jenkins/.local/bin:$HOME/.local/bin:$(go env GOPATH)/bin"
+
 echo "=== Running lint for $SERVICE ==="
 
 cd "$SERVICE"
