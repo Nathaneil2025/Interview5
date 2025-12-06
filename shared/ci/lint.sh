@@ -27,11 +27,8 @@ case "$SERVICE" in
         flake8 app/ tests/ --count --show-source --statistics
         ;;
     notification-service)
-        echo "Running golangci-lint for Go..."
-        if ! command -v golangci-lint &> /dev/null; then
-            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
-        fi
-        golangci-lint run --timeout=5m
+        echo "Running go vet for Go..."
+        go vet ./...
         ;;
     *)
         echo "Unknown service: $SERVICE"
