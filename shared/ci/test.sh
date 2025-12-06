@@ -15,7 +15,7 @@ cd "$SERVICE"
 case "$SERVICE" in
     user-service)
         echo "Running Jest tests for Node.js..."
-        npm ci
+        npm install
         npm run test:ci
         ;;
     transaction-service)

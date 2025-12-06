@@ -15,7 +15,7 @@ cd "$SERVICE"
 case "$SERVICE" in
     user-service)
         echo "Running ESLint for Node.js..."
-        npm ci
+        npm install
         npm run lint
         ;;
     transaction-service)
