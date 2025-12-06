@@ -9,12 +9,13 @@ pipeline {
     }
 
     triggers {
-        // Trigger on push to main or develop
         pollSCM('H/5 * * * *')
     }
 
     environment {
-        DOCKER_REGISTRY = 'your-registry.com'  // Update with your registry
+        AWS_REGION = 'eu-central-1'
+        ECR_REGISTRY = '518394500999.dkr.ecr.eu-central-1.amazonaws.com'
+        ECR_REPO_PREFIX = 'jenkins-monorepo-ci'
         IMAGE_TAG = "ci-${env.GIT_COMMIT?.take(7) ?: 'latest'}"
         SERVICES = 'user-service,transaction-service,notification-service'
     }
@@ -23,7 +24,6 @@ pipeline {
         stage('Detect Changes') {
             steps {
                 script {
-                    // Get list of changed files
                     def changedServices = detectChangedServices()
                     env.CHANGED_SERVICES = changedServices.join(',')
                     
@@ -128,52 +128,46 @@ pipeline {
             }
         }
 
-        stage('Docker Build') {
+        stage('ECR Login') {
+            when {
+                expression { env.CHANGED_SERVICES?.trim() }
+            }
+            steps {
+                sh '''
+                    aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                '''
+            }
+        }
+
+        stage('Docker Build & Push') {
             when {
                 expression { env.CHANGED_SERVICES?.trim() }
             }
             parallel {
-                stage('Build User Service Image') {
+                stage('Build & Push User Service') {
                     when {
                         expression { env.CHANGED_SERVICES?.contains('user-service') }
                     }
                     steps {
-                        buildDockerImage('user-service')
+                        buildAndPushImage('user-service')
                     }
                 }
 
-                stage('Build Transaction Service Image') {
+                stage('Build & Push Transaction Service') {
                     when {
                         expression { env.CHANGED_SERVICES?.contains('transaction-service') }
                     }
                     steps {
-                        buildDockerImage('transaction-service')
+                        buildAndPushImage('transaction-service')
                     }
                 }
 
-                stage('Build Notification Service Image') {
+                stage('Build & Push Notification Service') {
                     when {
                         expression { env.CHANGED_SERVICES?.contains('notification-service') }
                     }
                     steps {
-                        buildDockerImage('notification-service')
-                    }
-                }
-            }
-        }
-
-        stage('Push to Registry') {
-            when {
-                allOf {
-                    expression { env.CHANGED_SERVICES?.trim() }
-                    branch pattern: "(main|develop)", comparator: "REGEXP"
-                }
-            }
-            steps {
-                script {
-                    def services = env.CHANGED_SERVICES.split(',')
-                    services.each { service ->
-                        pushDockerImage(service)
+                        buildAndPushImage('notification-service')
                     }
                 }
             }
@@ -181,10 +175,7 @@ pipeline {
 
         stage('Manual Approval') {
             when {
-                allOf {
-                    expression { env.CHANGED_SERVICES?.trim() }
-                    branch 'main'
-                }
+                expression { env.CHANGED_SERVICES?.trim() }
             }
             steps {
                 script {
@@ -197,7 +188,6 @@ pipeline {
                               ]
                     }
                     echo "Deployment approved. Ready to deploy!"
-                    // CD would go here - out of scope for this assignment
                 }
             }
         }
@@ -227,12 +217,10 @@ def detectChangedServices() {
     def allServices = ['user-service', 'transaction-service', 'notification-service']
     
     try {
-        // Get changed files compared to previous commit or main branch
         def changes = ''
         if (env.GIT_PREVIOUS_COMMIT) {
             changes = sh(script: "git diff --name-only ${env.GIT_PREVIOUS_COMMIT} ${env.GIT_COMMIT}", returnStdout: true).trim()
         } else {
-            // First build or no previous commit - check against main
             changes = sh(script: "git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1 HEAD", returnStdout: true).trim()
         }
         
@@ -244,7 +232,6 @@ def detectChangedServices() {
             }
         }
         
-        // If shared CI scripts changed, run all services
         if (changes.contains('shared/ci/') || changes.contains('Jenkinsfile')) {
             changedServices = allServices
         }
@@ -287,11 +274,7 @@ def runSecurityScan(String service) {
 
 def publishTestResults(String service) {
     echo "Publishing test results for ${service}..."
-    
-    // Publish JUnit results
     junit allowEmptyResults: true, testResults: "${service}/**/junit.xml"
-    
-    // Publish coverage if available
     publishHTML(target: [
         allowMissing: true,
         alwaysLinkToLastBuild: false,
@@ -302,27 +285,16 @@ def publishTestResults(String service) {
     ])
 }
 
-def buildDockerImage(String service) {
-    echo "Building Docker image for ${service}..."
+def buildAndPushImage(String service) {
+    echo "Building and pushing Docker image for ${service}..."
     retry(2) {
         sh """
-            docker build -t ${service}:${env.IMAGE_TAG} ./${service}
-            docker tag ${service}:${env.IMAGE_TAG} ${service}:latest
+            docker build -t ${ECR_REGISTRY}/${ECR_REPO_PREFIX}/${service}:${IMAGE_TAG} ./${service}
+            docker tag ${ECR_REGISTRY}/${ECR_REPO_PREFIX}/${service}:${IMAGE_TAG} ${ECR_REGISTRY}/${ECR_REPO_PREFIX}/${service}:latest
+            docker push ${ECR_REGISTRY}/${ECR_REPO_PREFIX}/${service}:${IMAGE_TAG}
+            docker push ${ECR_REGISTRY}/${ECR_REPO_PREFIX}/${service}:latest
         """
     }
-}
-
-def pushDockerImage(String service) {
-    echo "Pushing Docker image for ${service}..."
-    // Uncomment and configure for your registry
-    // withCredentials([usernamePassword(credentialsId: 'docker-registry-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-    //     sh """
-    //         echo \$DOCKER_PASS | docker login ${env.DOCKER_REGISTRY} -u \$DOCKER_USER --password-stdin
-    //         docker tag ${service}:${env.IMAGE_TAG} ${env.DOCKER_REGISTRY}/${service}:${env.IMAGE_TAG}
-    //         docker push ${env.DOCKER_REGISTRY}/${service}:${env.IMAGE_TAG}
-    //     """
-    // }
-    echo "Push to registry skipped (configure credentials first)"
 }
 
 def sendNotification(String status) {
@@ -337,17 +309,4 @@ def sendNotification(String status) {
     Changed Services: ${env.CHANGED_SERVICES ?: 'None'}
     ============================================
     """
-    
-    // Uncomment to enable Slack notifications
-    // slackSend(
-    //     color: color,
-    //     message: "${emoji} *${env.JOB_NAME}* #${env.BUILD_NUMBER} - ${status}\nChanged: ${env.CHANGED_SERVICES ?: 'None'}\n${env.BUILD_URL}"
-    // )
-    
-    // Uncomment to enable MS Teams notifications
-    // office365ConnectorSend(
-    //     webhookUrl: env.TEAMS_WEBHOOK_URL,
-    //     status: status,
-    //     message: "Pipeline ${status}: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
-    // )
 }
