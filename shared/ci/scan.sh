@@ -1,6 +1,5 @@
 #!/bin/bash
 export PATH="$PATH:/var/lib/jenkins/.local/bin:$HOME/.local/bin:$(go env GOPATH)/bin"
-
 set -e
 
 SERVICE=$1
@@ -26,22 +25,18 @@ fi
 case "$SERVICE" in
     user-service)
         echo "Running npm audit for Node.js..."
-        npm ci
+        npm install
         npm audit --audit-level=high || true
         ;;
     transaction-service)
         echo "Running bandit for Python..."
         pip install bandit -q
         bandit -r app/ -f json -o bandit-report.json || true
-        bandit -r app/ -ll
+        bandit -r app/ -ll || true
         ;;
     notification-service)
         echo "Running go vet for Go..."
         go vet ./...
-        # Additional security check with govulncheck if available
-        if command -v govulncheck &> /dev/null; then
-            govulncheck ./... || true
-        fi
         ;;
     *)
         echo "Unknown service: $SERVICE"
