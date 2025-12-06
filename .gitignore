@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+vendor/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Coverage reports
+coverage/
+coverage.out
+coverage.xml
+*.lcov
+.coverage
+
+# Test reports
+reports/
+junit.xml
+bandit-report.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+*.env
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!example.tfvars
+
+# Keys and secrets
+*.pem
+*.key
+secrets/
+
+# Logs
+*.log
+logs/
+
+# Docker
+.docker/
